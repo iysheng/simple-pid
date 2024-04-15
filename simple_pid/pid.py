@@ -79,6 +79,7 @@ class PID(object):
         self._last_error = None
         self._last_input = None
 
+        # 设置时间基准函数,用来延时
         if time_fn is not None:
             # Use the user supplied time function
             self.time_fn = time_fn
@@ -114,6 +115,7 @@ class PID(object):
 
         now = self.time_fn()
         if dt is None:
+            # 这里还是会计算 dt,即时间偏差
             dt = now - self._last_time if (now - self._last_time) else 1e-16
         elif dt <= 0:
             raise ValueError('dt has negative value {}, must be positive'.format(dt))
@@ -123,10 +125,14 @@ class PID(object):
             return self._last_output
 
         # Compute error terms
+        # 计算本次目标和实际的偏差
         error = self.setpoint - input_
+        # 计算输入偏差
         d_input = input_ - (self._last_input if (self._last_input is not None) else input_)
+        # 计算偏差的的偏差，用来计算微分
         d_error = error - (self._last_error if (self._last_error is not None) else error)
 
+        print(error, d_error)
         # Check if must map the error
         if self.error_map is not None:
             error = self.error_map(error)
@@ -134,23 +140,31 @@ class PID(object):
         # Compute the proportional term
         if not self.proportional_on_measurement:
             # Regular proportional-on-error, simply set the proportional term
+            # 计算比例误差
             self._proportional = self.Kp * error
         else:
             # Add the proportional error on measurement to error_sum
             self._proportional -= self.Kp * d_input
 
         # Compute integral and derivative terms
+        # 计算积分误差
         self._integral += self.Ki * error * dt
+        # 对积分误差进行限幅
         self._integral = _clamp(self._integral, self.output_limits)  # Avoid integral windup
 
         if self.differential_on_measurement:
             self._derivative = -self.Kd * d_input / dt
         else:
+            # 计算微分误差
             self._derivative = self.Kd * d_error / dt
 
         # Compute final output
+        # 计算控制输出
         output = self._proportional + self._integral + self._derivative
+        #  print("p i d ans derr", self._proportional, self._integral, self._derivative, output, d_error)
+        # 计算对输出进行限幅
         output = _clamp(output, self.output_limits)
+        # print("clamp p i d ctl", self._proportional, self._integral, self._derivative, output)
 
         # Keep track of state
         self._last_output = output
